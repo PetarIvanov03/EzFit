@@ -55,3 +55,12 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Local settings (може да съдържат connection strings / бъдещи ключове)
+appsettings.Development.json
+appsettings.*.local.json
+
+# Visual Studio specific
+.vs/
+*.user
+*.suo

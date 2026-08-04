@@ -1,0 +1,6 @@
+@EzFit_HostAddress = http://localhost:5222
+
+GET {{EzFit_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
