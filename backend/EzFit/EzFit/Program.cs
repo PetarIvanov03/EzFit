@@ -1,6 +1,8 @@
 using EzFit.Data;
 using EzFit.Repositories;
 using EzFit.Repositories.Interfaces;
+using EzFit.Services;
+using EzFit.Services.Interfaces;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -26,6 +28,9 @@ namespace EzFit
             builder.Services.AddScoped<IUserRepository, UserRepository>();
             builder.Services.AddScoped<IDayRepository, DayRepository>();
             builder.Services.AddScoped<IEntryRepository, EntryRepository>();
+
+            builder.Services.AddScoped<IDayService, DayService>();
+            builder.Services.AddScoped<IEntryService, EntryService>();
 
             builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 

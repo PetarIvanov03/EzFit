@@ -4,7 +4,6 @@ using EzFit.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Threading.Tasks;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace EzFit.Repositories
 {
