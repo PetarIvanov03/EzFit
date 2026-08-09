@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace EzFit.DTOs
+namespace EzFit.DTOs.Responses
 {
     public class DaySummaryDto
     {

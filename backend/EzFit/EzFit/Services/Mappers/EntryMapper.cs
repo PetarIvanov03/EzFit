@@ -1,7 +1,7 @@
-﻿using EzFit.DTOs;
+﻿using EzFit.DTOs.Responses;
 using EzFit.Entities;
 
-namespace EzFit.Services
+namespace EzFit.Services.Mappers
 {
     public static class EntryMapper
     {

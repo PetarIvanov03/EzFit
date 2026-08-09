@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace EzFit.DTOs
+namespace EzFit.DTOs.Responses
 {
     public class EntryDto
     {
@@ -12,6 +12,13 @@ namespace EzFit.DTOs
         public DateTime? OccurredAt { get; set; }
         public DateTime CreatedAt { get; set; }
 
+        // Meal
+        public int? FoodKcal { get; set; }
+        public decimal? Protein { get; set; }
+        public decimal? Fats { get; set; }
+        public decimal? Carbs { get; set; }
+
+        // Activity
         public int? ActivityKcal { get; set; }
         public int? DurationMin { get; set; }
         public decimal? DistanceKm { get; set; }
@@ -20,15 +27,11 @@ namespace EzFit.DTOs
         public decimal? ElevationM { get; set; }
         public int? Steps { get; set; }
 
-        public int? FoodKcal { get; set; }
-        public decimal? Protein { get; set; }
-        public decimal? Fats { get; set; }
-        public decimal? Carbs { get; set; }
-
-        public int? TotalMin { get; set; }
+        // Sleep
+        public int? TotalSleepMin { get; set; }
         public int? DeepMin { get; set; }
         public int? RemMin { get; set; }
         public int? LightMin { get; set; }
-        public int? Score { get; set; }
+        public int? SleepScore { get; set; }
     }
 }

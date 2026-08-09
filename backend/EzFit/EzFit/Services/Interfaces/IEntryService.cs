@@ -1,4 +1,5 @@
-﻿using EzFit.DTOs;
+﻿using EzFit.DTOs.Requests;
+using EzFit.DTOs.Responses;
 using System;
 using System.Threading.Tasks;
 

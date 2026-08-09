@@ -1,7 +1,7 @@
-﻿using EzFit.DTOs;
-using EzFit.Entities;
+﻿using EzFit.DTOs.Responses;
 using EzFit.Repositories.Interfaces;
 using EzFit.Services.Interfaces;
+using EzFit.Services.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
