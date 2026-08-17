@@ -31,6 +31,8 @@ namespace EzFit
 
             builder.Services.AddScoped<IDayService, DayService>();
             builder.Services.AddScoped<IEntryService, EntryService>();
+            builder.Services.AddScoped<IImageService, ImageService>();
+            builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 
             builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 

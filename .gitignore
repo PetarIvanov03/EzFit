@@ -23,6 +23,8 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
+App_Data/uploads/
+
 # .NET Core
 project.lock.json
 project.fragment.lock.json
@@ -56,7 +58,7 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
-# Local settings (може да съдържат connection strings / бъдещи ключове)
+# Local settings
 appsettings.Development.json
 appsettings.*.local.json
 

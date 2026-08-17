@@ -37,11 +37,11 @@ namespace EzFit.Services.Mappers
 
             if (entry.SleepData is not null)
             {
-                dto.TotalMin = entry.SleepData.TotalMin;
+                dto.DurationMin = entry.SleepData.TotalMin;
                 dto.DeepMin = entry.SleepData.DeepMin;
                 dto.RemMin = entry.SleepData.RemMin;
                 dto.LightMin = entry.SleepData.LightMin;
-                dto.Score = entry.SleepData.Score;
+                dto.SleepScore = entry.SleepData.Score;
             }
 
             return dto;
