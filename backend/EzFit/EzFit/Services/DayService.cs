@@ -49,6 +49,8 @@ namespace EzFit.Services
                 .Where(e => e.NutritionData is not null)
                 .Sum(e => e.NutritionData!.Carbs);
 
+
+            //! naps?
             var sleepEntry = day.Entries
                 .Where(e => e.SleepData is not null)
                 .OrderByDescending(e => e.OccurredAt ?? e.CreatedAt)
