@@ -23,7 +23,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
-App_Data/uploads/
+App_Data/
 
 # .NET Core
 project.lock.json
