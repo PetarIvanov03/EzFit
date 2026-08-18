@@ -19,9 +19,9 @@ namespace EzFit.Services
             _entryRepository = entryRepository;
             _dayRepository = dayRepository;
         }
-        // Забележка: едно извикване = едно Entry = един тип.
-        // Ако AI-ят разпознае няколко събития в една снимка (напр. храна + сън),
-        // controller/AI слоят прави отделно извикване на този метод за всяко.
+        // Note: one call = one Entry = one type.
+        // If the AI recognizes multiple events in a single photo (e.g. food + sleep),
+        // the controller/AI layer makes a separate call to this method for each.
         public async Task<EntryDto> AddEntryAsync(int userId, DateOnly date, CreateEntryDto dto)
         {
             Validate(dto);
@@ -35,6 +35,8 @@ namespace EzFit.Services
                 Title = dto.Title,
                 RawText = dto.RawText,
                 OccurredAt = dto.OccurredAt,
+                ImagePath = dto.ImagePath,
+                AiRawResponse = dto.AiRawResponse,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -88,23 +90,23 @@ namespace EzFit.Services
             if (dto.Type == EntryType.Meal)
             {
                 if (dto.FoodKcal is > 3000)
-                    throw new ArgumentException("Калориите на едно хранене не могат да надвишават 3000.");
+                    throw new ArgumentException("Calories for a single meal cannot exceed 3000.");
                 if (dto.FoodKcal is < 0 || dto.Protein is < 0 || dto.Fats is < 0 || dto.Carbs is < 0)
-                    throw new ArgumentException("Стойностите не могат да са отрицателни.");
+                    throw new ArgumentException("Values cannot be negative.");
             }
 
             if (dto.Type == EntryType.Activity)
             {
                 if (dto.ActivityKcal is > 5000)
-                    throw new ArgumentException("Изгорените калории не могат да надвишават 5000.");
+                    throw new ArgumentException("Calories burned cannot exceed 5000.");
                 if (dto.ActivityKcal is < 0 || dto.DurationMin is < 0 || dto.DistanceKm is < 0 || dto.Steps is < 0)
-                    throw new ArgumentException("Стойностите не могат да са отрицателни.");
+                    throw new ArgumentException("Values cannot be negative.");
             }
 
             if (dto.Type == EntryType.Sleep)
             {
                 if (dto.TotalSleepMin is < 0 || dto.DeepMin is < 0 || dto.RemMin is < 0 || dto.LightMin is < 0)
-                    throw new ArgumentException("Стойностите не могат да са отрицателни.");
+                    throw new ArgumentException("Values cannot be negative.");
             }
         }
     }

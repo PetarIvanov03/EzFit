@@ -9,6 +9,8 @@ namespace EzFit.DTOs.Requests
         public string? Title { get; set; }
         public string? RawText { get; set; }
         public DateTime? OccurredAt { get; set; }
+        public string? ImagePath { get; set; }
+        public string? AiRawResponse { get; set; }
 
         // Meal
         public int? FoodKcal { get; set; }

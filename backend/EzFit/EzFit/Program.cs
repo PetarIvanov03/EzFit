@@ -33,6 +33,7 @@ namespace EzFit
             builder.Services.AddScoped<IEntryService, EntryService>();
             builder.Services.AddScoped<IImageService, ImageService>();
             builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+            builder.Services.AddScoped<IAiService, GeminiAiService>();
 
             builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 

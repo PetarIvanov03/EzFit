@@ -6,8 +6,8 @@ namespace EzFit.Services.Mappers
 {
     public static class AiResponseMapper
     {
-        // null резултат = reject_entry, orchestrator-ът проверява това
-        // и не вика EntryService за този резултат
+        // null result = reject_entry, the orchestrator checks this
+        // and does not call EntryService for this result
         public static CreateEntryDto? ToCreateEntryDto(AiExtractionResult result)
         {
             if (result.ToolType == AiToolType.RejectEntry)

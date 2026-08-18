@@ -12,7 +12,7 @@ namespace EzFit.Controllers
     {
         private readonly IDayService _dayService;
 
-        // Без автентикация все още — hardcoded, докато не стигнем до Etap 4
+        // No authentication yet — hardcoded until we reach Stage 4
         private const int HardcodedUserId = 1;
 
         public DayController(IDayService dayService)

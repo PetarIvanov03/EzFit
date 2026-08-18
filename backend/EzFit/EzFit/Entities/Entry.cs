@@ -17,7 +17,7 @@ namespace EzFit.Entities
         public DateTime CreatedAt { get; set; }
         public DateTime? OccurredAt { get; set; }
 
-        // 1:1 разширения — само едно от тях е попълнено, според Type
+        // 1:1 extensions — only one of them is populated, based on Type
         public NutritionData? NutritionData { get; set; }
         public ActivityData? ActivityData { get; set; }
         public SleepData? SleepData { get; set; }
