@@ -1,6 +1,7 @@
-﻿using EzFit.DTOs.Responses;
+using EzFit.DTOs.Responses;
 using EzFit.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -10,23 +11,23 @@ namespace EzFit.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableRateLimiting("api")]
     public class DayController : ControllerBase
     {
         private readonly IDayService _dayService;
+        private readonly ICurrentUserProvider _currentUserProvider;
 
-        // No authentication yet — hardcoded until we reach Stage 4
-        private const int HardcodedUserId = 1;
-
-        public DayController(IDayService dayService)
+        public DayController(IDayService dayService, ICurrentUserProvider currentUserProvider)
         {
             _dayService = dayService;
+            _currentUserProvider = currentUserProvider;
         }
 
         // GET api/day?date=2026-08-09
         [HttpGet]
-        public async Task<ActionResult<DaySummaryDto>> GetDaySummary([FromQuery] DateOnly date)
+        public async Task<ActionResult<DaySummaryDto>> GetDaySummary([FromQuery] DateOnly date, CancellationToken cancellationToken)
         {
-            var summary = await _dayService.GetDaySummaryAsync(HardcodedUserId, date);
+            var summary = await _dayService.GetDaySummaryAsync(_currentUserProvider.UserId, date, cancellationToken);
             return Ok(summary);
         }
 
@@ -37,7 +38,7 @@ namespace EzFit.Controllers
             if (count <= 0) count = 7;
             if (count > 30) count = 30;
 
-            var summaries = await _dayService.GetRecentDaySummariesAsync(HardcodedUserId, count, cancellationToken);
+            var summaries = await _dayService.GetRecentDaySummariesAsync(_currentUserProvider.UserId, count, cancellationToken);
             return Ok(summaries);
         }
     }

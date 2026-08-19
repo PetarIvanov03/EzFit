@@ -20,9 +20,9 @@ namespace EzFit.Services
             _dayRepository = dayRepository;
         }
 
-        public async Task<DaySummaryDto> GetDaySummaryAsync(int userId, DateOnly date)
+        public async Task<DaySummaryDto> GetDaySummaryAsync(int userId, DateOnly date, CancellationToken cancellationToken = default)
         {
-            var day = await _dayRepository.GetByUserAndDateAsync(userId, date);
+            var day = await _dayRepository.GetByUserAndDateAsync(userId, date, cancellationToken);
             return BuildSummary(date, day);
         }
 

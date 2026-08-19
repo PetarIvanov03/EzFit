@@ -1,9 +1,13 @@
-﻿using EzFit.Services.Interfaces;
+using EzFit.Exceptions;
+using EzFit.Options;
+using EzFit.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Services
@@ -15,9 +19,18 @@ namespace EzFit.Services
         private const int OverlapPx = 80;
         private const int LandscapeMaxSide = 1600;
 
-        public async Task<List<Image>> ProcessAsync(Stream imageStream)
+        private readonly UploadsOptions _uploadsOptions;
+
+        public ImageService(IOptions<UploadsOptions> uploadsOptions)
         {
-            using var img = await Image.LoadAsync(imageStream);
+            _uploadsOptions = uploadsOptions.Value;
+        }
+
+        public async Task<List<Image>> ProcessAsync(Stream imageStream, CancellationToken cancellationToken = default)
+        {
+            await ValidateDimensionsAsync(imageStream, cancellationToken);
+
+            using var img = await Image.LoadAsync(imageStream, cancellationToken);
 
             var originalWidth = img.Width;
             var originalHeight = img.Height;
@@ -65,6 +78,35 @@ namespace EzFit.Services
             }
 
             return tiles;
+        }
+
+        // Reads only the header via Image.IdentifyAsync — rejects oversized images
+        // before Image.LoadAsync would decode the full pixel buffer into memory.
+        private async Task ValidateDimensionsAsync(Stream imageStream, CancellationToken cancellationToken)
+        {
+            var info = await Image.IdentifyAsync(imageStream, cancellationToken);
+            if (imageStream.CanSeek)
+            {
+                imageStream.Position = 0;
+            }
+
+            if (info is null)
+            {
+                throw new ImageValidationException("Unrecognized image format.");
+            }
+
+            if (info.Width > _uploadsOptions.MaxDimension || info.Height > _uploadsOptions.MaxDimension)
+            {
+                throw new ImageValidationException(
+                    $"Image dimensions exceed the maximum allowed ({_uploadsOptions.MaxDimension}px per side).");
+            }
+
+            var pixelCount = (long)info.Width * info.Height;
+            if (pixelCount > _uploadsOptions.MaxPixels)
+            {
+                throw new ImageValidationException(
+                    $"Image resolution exceeds the maximum allowed ({_uploadsOptions.MaxPixels} pixels).");
+            }
         }
     }
 }

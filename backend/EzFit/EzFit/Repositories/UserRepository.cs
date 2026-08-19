@@ -1,6 +1,7 @@
 ﻿using EzFit.Data;
 using EzFit.Entities;
 using EzFit.Repositories.Interfaces;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Repositories
@@ -14,9 +15,9 @@ namespace EzFit.Repositories
             _context = context;
         }
 
-        public async Task<User?> GetByIdAsync(int id)
+        public async Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
-            return await _context.Users.FindAsync(id);
+            return await _context.Users.FindAsync(new object?[] { id }, cancellationToken);
         }
     }
 }

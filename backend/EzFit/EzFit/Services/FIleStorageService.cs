@@ -1,5 +1,6 @@
-﻿using EzFit.Services.Interfaces;
-using Microsoft.Extensions.Configuration;
+using EzFit.Options;
+using EzFit.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -8,19 +9,25 @@ using SixLabors.ImageSharp.Formats.Webp;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Services
 {
     public class FileStorageService : IFileStorageService
     {
-        private readonly IConfiguration _configuration;
-        private readonly string _uploadsRoot;
-
-        public FileStorageService(IConfiguration configuration)
+        private static readonly Dictionary<string, (string Extension, Func<int, ImageEncoder> CreateEncoder)> EncodersByFormat = new()
         {
-            _configuration = configuration;
-            _uploadsRoot = _configuration["ImageStorage:UploadsRoot"] ?? "App_Data/uploads";
+            ["Webp"] = ("webp", quality => new WebpEncoder { Quality = quality }),
+            ["Jpeg"] = ("jpg", quality => new JpegEncoder { Quality = quality }),
+            ["Png"] = ("png", _ => new PngEncoder()),
+        };
+
+        private readonly ImageStorageOptions _options;
+
+        public FileStorageService(IOptions<ImageStorageOptions> options)
+        {
+            _options = options.Value;
         }
 
         public string GenerateBaseName(int userId)
@@ -30,12 +37,12 @@ namespace EzFit.Services
             return $"{userId}_{timestamp}_{suffix}";
         }
 
-        public async Task SaveAsync(string baseName, List<Image> images)
+        public async Task SaveAsync(string baseName, List<Image> images, CancellationToken cancellationToken = default)
         {
-            Directory.CreateDirectory(_uploadsRoot);
+            Directory.CreateDirectory(_options.UploadsRoot);
 
-            var extension = GetExtension();
-            var encoder = GetEncoder();
+            var (extension, createEncoder) = GetFormat();
+            var encoder = createEncoder(_options.Quality);
 
             for (int i = 0; i < images.Count; i++)
             {
@@ -43,39 +50,20 @@ namespace EzFit.Services
                     ? $"{baseName}.{extension}"
                     : $"{baseName}_tile{i + 1}.{extension}";
 
-                var path = Path.Combine(_uploadsRoot, fileName);
+                var path = Path.Combine(_options.UploadsRoot, fileName);
 
                 await using var stream = File.Create(path);
-                await images[i].SaveAsync(stream, encoder);
+                await images[i].SaveAsync(stream, encoder, cancellationToken);
 
                 images[i].Dispose();
             }
         }
 
-        private ImageEncoder GetEncoder()
+        private (string Extension, Func<int, ImageEncoder> CreateEncoder) GetFormat()
         {
-            var format = _configuration["ImageStorage:Format"] ?? "Webp";
-            var quality = int.Parse(_configuration["ImageStorage:Quality"] ?? "80");
-
-            return format switch
-            {
-                "Webp" => new WebpEncoder { Quality = quality },
-                "Jpeg" => new JpegEncoder { Quality = quality },
-                "Png" => new PngEncoder(),
-                _ => new WebpEncoder { Quality = quality }
-            };
-        }
-
-        private string GetExtension()
-        {
-            var format = _configuration["ImageStorage:Format"] ?? "Webp";
-            return format switch
-            {
-                "Webp" => "webp",
-                "Jpeg" => "jpg",
-                "Png" => "png",
-                _ => "webp"
-            };
+            return EncodersByFormat.TryGetValue(_options.Format, out var format)
+                ? format
+                : EncodersByFormat["Webp"];
         }
     }
 }

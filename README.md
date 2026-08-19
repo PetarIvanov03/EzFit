@@ -64,15 +64,34 @@ Requires .NET 8 SDK.
    ```
    dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<postgres connection string>"
    dotnet user-secrets set "Gemini:ApiKey" "<gemini api key>"
+   dotnet user-secrets set "Security:ApiKey" "<shared api key>"
    ```
    - `ConnectionStrings:DefaultConnection` — a PostgreSQL connection string. **Local dev currently points at the same Neon database as production** — there's no separate local DB set up yet, so be aware writes affect the live data.
    - `Gemini:ApiKey` — a Gemini API key (required for `/api/log`; `/api/entry` and `/api/day` work without it).
    - `Gemini:Model` — optional, defaults to `gemini-3.5-flash` if unset.
+   - `Security:ApiKey` — optional. When set, every `/api` request must send a matching
+     `X-Api-Key` header (see `ApiKeyMiddleware`). This is a stopgap against casual
+     scripted abuse, not real security — the key ships in the public frontend bundle.
+     Leave it unset locally and the check no-ops (a startup warning is logged).
 3. Run it:
    ```
    dotnet run --launch-profile https
    ```
    This serves on `https://localhost:7059` (and `http://localhost:5222`), with Swagger UI at `/swagger`.
+
+Non-secret upload limits live in `appsettings.json` under `Uploads` (no
+user-secrets needed, override per-environment via env vars if desired):
+- `MaxFileSizeBytes` — per-file cap enforced in `LogController` (default 10 MB)
+- `MaxFileCount` — max images per `/api/log` request (default 5)
+- `MaxPixels` / `MaxDimension` — header-only checks in `ImageService` that
+  reject oversized images before they're decoded
+
+Also non-secret, under `RateLimiting` (fixed-window limits, partitioned by client IP):
+- `Log:PermitLimit` / `Log:WindowSeconds` — applies to `POST /api/log` (default 10/60s)
+- `Api:PermitLimit` / `Api:WindowSeconds` — applies to the rest of `/api` (default 60/60s)
+
+And `CurrentUser:Id` — the fixed user id used everywhere until real auth lands
+(read by `ICurrentUserProvider`; default `1`).
 
 ### Frontend
 
@@ -80,13 +99,15 @@ Requires Node.js.
 
 1. `cd frontend`
 2. `npm install`
-3. Copy `.env.example` to `.env.local` and set `VITE_API_URL` to match the backend profile you're running (defaults to `https://localhost:7059/api` if unset; if the browser rejects the self-signed dev cert, either open the swagger URL once to accept it, or point at `http://localhost:5222/api` instead).
+3. Copy `.env.example` to `.env.local` and set `VITE_API_URL` to match the backend profile you're running (defaults to `https://localhost:7059/api` if unset; if the browser rejects the self-signed dev cert, either open the swagger URL once to accept it, or point at `http://localhost:5222/api` instead). If the backend has `Security:ApiKey` configured, also set `VITE_API_KEY` to the same value.
 4. `npm run dev`
 
 ## Known limitations
 
 - **No authentication yet.** Auth is a planned, later stage of this
-  project — not yet implemented.
+  project — not yet implemented. In the meantime the API is gated by rate
+  limiting, upload limits, and an optional shared `X-Api-Key` header — none
+  of which are a substitute for real per-user auth.
 - **Local dev shares the production database.** There's no local/dev
   Postgres instance configured — running the backend locally reads and
   writes to the same Neon database the live deployment uses. This is a

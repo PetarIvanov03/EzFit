@@ -1,14 +1,25 @@
 using EzFit.Data;
+using EzFit.Middleware;
+using EzFit.Options;
 using EzFit.Repositories;
 using EzFit.Repositories.Interfaces;
 using EzFit.Services;
 using EzFit.Services.Interfaces;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Memory;
 using System;
+using System.Threading.RateLimiting;
 
 namespace EzFit
 {
@@ -34,6 +45,43 @@ namespace EzFit
             builder.Services.AddScoped<IImageService, ImageService>();
             builder.Services.AddScoped<IFileStorageService, FileStorageService>();
             builder.Services.AddScoped<IAiService, GeminiAiService>();
+            builder.Services.AddScoped<ICurrentUserProvider, StaticCurrentUserProvider>();
+
+            builder.Services.Configure<UploadsOptions>(builder.Configuration.GetSection(UploadsOptions.SectionName));
+            builder.Services.Configure<ImageStorageOptions>(builder.Configuration.GetSection(ImageStorageOptions.SectionName));
+            builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection(RateLimitingOptions.SectionName));
+            builder.Services.Configure<SecurityOptions>(builder.Configuration.GetSection(SecurityOptions.SectionName));
+            builder.Services.Configure<CurrentUserOptions>(builder.Configuration.GetSection(CurrentUserOptions.SectionName));
+
+            var uploadsOptions = builder.Configuration.GetSection(UploadsOptions.SectionName).Get<UploadsOptions>()
+                ?? new UploadsOptions();
+            var maxRequestBodyBytes = uploadsOptions.MaxFileSizeBytes * uploadsOptions.MaxFileCount;
+
+            // A whole decoded frame is one contiguous allocation; cap it well above
+            // MaxPixels (raw RGBA32) so legitimate uploads still decode, but bound the
+            // worst case a malicious/corrupt file can force onto the 512 MB container.
+            const int BytesPerPixel = 4;
+            const int DecodeSafetyFactor = 3;
+            var allocationLimitMb = (int)Math.Max(
+                64,
+                uploadsOptions.MaxPixels * BytesPerPixel * DecodeSafetyFactor / (1024 * 1024));
+
+            Configuration.Default.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions
+            {
+                AllocationLimitMegabytes = allocationLimitMb
+            });
+
+            // Kestrel/form limits sized off the same Uploads config the controller and
+            // ImageService validate against, so there's one place to change them.
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = maxRequestBodyBytes;
+            });
+
+            builder.Services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = maxRequestBodyBytes;
+            });
 
             builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
@@ -57,7 +105,67 @@ namespace EzFit
                 });
             });
 
+            builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+            builder.Services.AddProblemDetails();
+
+            var rateLimitingOptions = builder.Configuration.GetSection(RateLimitingOptions.SectionName).Get<RateLimitingOptions>()
+                ?? new RateLimitingOptions();
+
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+                options.OnRejected = async (context, cancellationToken) =>
+                {
+                    if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                    {
+                        context.HttpContext.Response.Headers.RetryAfter =
+                            ((int)retryAfter.TotalSeconds).ToString(System.Globalization.NumberFormatInfo.InvariantInfo);
+                    }
+
+                    context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                    await context.HttpContext.Response.WriteAsync("Too many requests. Please try again later.", cancellationToken);
+                };
+
+                // Partitioned on the (forwarded-header-corrected) client IP — see UseForwardedHeaders below.
+                options.AddPolicy("log", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                    GetClientIp(httpContext),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = rateLimitingOptions.Log.PermitLimit,
+                        Window = TimeSpan.FromSeconds(rateLimitingOptions.Log.WindowSeconds),
+                        QueueLimit = 0
+                    }));
+
+                options.AddPolicy("api", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                    GetClientIp(httpContext),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = rateLimitingOptions.Api.PermitLimit,
+                        Window = TimeSpan.FromSeconds(rateLimitingOptions.Api.WindowSeconds),
+                        QueueLimit = 0
+                    }));
+            });
+
             var app = builder.Build();
+
+            if (string.IsNullOrEmpty(builder.Configuration[$"{SecurityOptions.SectionName}:ApiKey"]))
+            {
+                app.Logger.LogWarning(
+                    "Security:ApiKey is not configured — the /api endpoints are not protected by the shared API key gate.");
+            }
+
+            // Render terminates TLS and forwards plain HTTP; this must run before anything
+            // that reads the scheme (HTTPS redirection) or the client IP (rate limiter).
+            var forwardedHeadersOptions = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+            };
+            forwardedHeadersOptions.KnownNetworks.Clear();
+            forwardedHeadersOptions.KnownProxies.Clear();
+            app.UseForwardedHeaders(forwardedHeadersOptions);
+
+            app.UseExceptionHandler();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
@@ -70,6 +178,10 @@ namespace EzFit
 
             app.UseCors("Frontend");
 
+            app.UseMiddleware<ApiKeyMiddleware>();
+
+            app.UseRateLimiter();
+
             app.UseAuthorization();
 
 
@@ -77,5 +189,8 @@ namespace EzFit
 
             app.Run();
         }
+
+        private static string GetClientIp(HttpContext httpContext) =>
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 }

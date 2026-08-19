@@ -5,6 +5,7 @@ using EzFit.Repositories.Interfaces;
 using EzFit.Services.Interfaces;
 using EzFit.Services.Mappers;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Services
@@ -22,11 +23,11 @@ namespace EzFit.Services
         // Note: one call = one Entry = one type.
         // If the AI recognizes multiple events in a single photo (e.g. food + sleep),
         // the controller/AI layer makes a separate call to this method for each.
-        public async Task<EntryDto> AddEntryAsync(int userId, DateOnly date, CreateEntryDto dto)
+        public async Task<EntryDto> AddEntryAsync(int userId, DateOnly date, CreateEntryDto dto, CancellationToken cancellationToken = default)
         {
             Validate(dto);
 
-            var day = await _dayRepository.GetOrCreateAsync(userId, date);
+            var day = await _dayRepository.GetOrCreateAsync(userId, date, cancellationToken);
 
             var entry = new Entry
             {
@@ -80,7 +81,7 @@ namespace EzFit.Services
                     break;
             }
 
-            await _entryRepository.AddAsync(entry);
+            await _entryRepository.AddAsync(entry, cancellationToken);
 
             return EntryMapper.ToDto(entry);
         }

@@ -18,7 +18,7 @@ namespace EzFit.Repositories
         {
             _context = context;
         }
-        public async Task<Day?> GetByUserAndDateAsync(int userId, DateOnly date)
+        public async Task<Day?> GetByUserAndDateAsync(int userId, DateOnly date, CancellationToken cancellationToken = default)
         {
             return await _context.Days
                 .Include(d => d.Entries)
@@ -27,18 +27,18 @@ namespace EzFit.Repositories
                     .ThenInclude(e => e.ActivityData)
                 .Include(d => d.Entries)
                     .ThenInclude(e => e.SleepData)
-                .FirstOrDefaultAsync(d => d.UserId == userId && d.Date == date);
+                .FirstOrDefaultAsync(d => d.UserId == userId && d.Date == date, cancellationToken);
         }
 
-        public async Task<Day> GetOrCreateAsync(int userId, DateOnly date)
+        public async Task<Day> GetOrCreateAsync(int userId, DateOnly date, CancellationToken cancellationToken = default)
         {
-            var day = await GetByUserAndDateAsync(userId, date);
+            var day = await GetByUserAndDateAsync(userId, date, cancellationToken);
 
             if (day is null)
             {
                 day = new Day { UserId = userId, Date = date };
                 _context.Days.Add(day);
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(cancellationToken);
             }
 
             return day;
