@@ -1,10 +1,12 @@
 ﻿using EzFit.DTOs.Responses;
+using EzFit.Entities;
 using EzFit.Repositories.Interfaces;
 using EzFit.Services.Interfaces;
 using EzFit.Services.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Services
@@ -21,7 +23,17 @@ namespace EzFit.Services
         public async Task<DaySummaryDto> GetDaySummaryAsync(int userId, DateOnly date)
         {
             var day = await _dayRepository.GetByUserAndDateAsync(userId, date);
+            return BuildSummary(date, day);
+        }
 
+        public async Task<List<DaySummaryDto>> GetRecentDaySummariesAsync(int userId, int count, CancellationToken cancellationToken = default)
+        {
+            var days = await _dayRepository.GetRecentByUserAsync(userId, count, cancellationToken);
+            return days.Select(day => BuildSummary(day.Date, day)).ToList();
+        }
+
+        private static DaySummaryDto BuildSummary(DateOnly date, Day? day)
+        {
             if (day is null)
             {
                 return new DaySummaryDto(date, new List<EntryDto>(), 0, 0, 0, 0, 0, 0, null);
@@ -48,7 +60,6 @@ namespace EzFit.Services
             var totalCarbs = day.Entries
                 .Where(e => e.NutritionData is not null)
                 .Sum(e => e.NutritionData!.Carbs);
-
 
             //! naps?
             var sleepEntry = day.Entries

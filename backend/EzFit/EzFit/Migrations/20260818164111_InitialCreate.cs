@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -15,11 +16,11 @@ namespace EzFit.Migrations
                 name: "Users",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    PasswordHash = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    PasswordHash = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -30,9 +31,9 @@ namespace EzFit.Migrations
                 name: "Days",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<int>(type: "int", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<int>(type: "integer", nullable: false),
                     Date = table.Column<DateOnly>(type: "date", nullable: false)
                 },
                 constraints: table =>
@@ -50,15 +51,15 @@ namespace EzFit.Migrations
                 name: "UserProfiles",
                 columns: table => new
                 {
-                    UserId = table.Column<int>(type: "int", nullable: false),
-                    Age = table.Column<int>(type: "int", nullable: false),
-                    WeightKg = table.Column<decimal>(type: "decimal(5,2)", nullable: false),
-                    HeightCm = table.Column<decimal>(type: "decimal(5,2)", nullable: false),
-                    Gender = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    KcalTarget = table.Column<int>(type: "int", nullable: false),
-                    ProteinTarget = table.Column<int>(type: "int", nullable: false),
-                    CarbsTarget = table.Column<int>(type: "int", nullable: false),
-                    FatsTarget = table.Column<int>(type: "int", nullable: false)
+                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    Age = table.Column<int>(type: "integer", nullable: false),
+                    WeightKg = table.Column<decimal>(type: "numeric(5,2)", nullable: false),
+                    HeightCm = table.Column<decimal>(type: "numeric(5,2)", nullable: false),
+                    Gender = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    KcalTarget = table.Column<int>(type: "integer", nullable: false),
+                    ProteinTarget = table.Column<int>(type: "integer", nullable: false),
+                    CarbsTarget = table.Column<int>(type: "integer", nullable: false),
+                    FatsTarget = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -75,17 +76,17 @@ namespace EzFit.Migrations
                 name: "Entries",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    DayId = table.Column<int>(type: "int", nullable: false),
-                    Type = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    RawText = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ImagePath = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    AiRawResponse = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Comment = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    OccurredAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    DayId = table.Column<int>(type: "integer", nullable: false),
+                    Type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    RawText = table.Column<string>(type: "text", nullable: true),
+                    ImagePath = table.Column<string>(type: "text", nullable: true),
+                    AiRawResponse = table.Column<string>(type: "text", nullable: true),
+                    Comment = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    OccurredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -102,14 +103,14 @@ namespace EzFit.Migrations
                 name: "ActivityData",
                 columns: table => new
                 {
-                    EntryId = table.Column<int>(type: "int", nullable: false),
-                    Kcal = table.Column<int>(type: "int", nullable: false),
-                    DurationMin = table.Column<int>(type: "int", nullable: false),
-                    DistanceKm = table.Column<decimal>(type: "decimal(6,2)", nullable: true),
-                    AvgHr = table.Column<int>(type: "int", nullable: true),
-                    MaxHr = table.Column<int>(type: "int", nullable: true),
-                    ElevationM = table.Column<decimal>(type: "decimal(7,2)", nullable: true),
-                    Steps = table.Column<int>(type: "int", nullable: true)
+                    EntryId = table.Column<int>(type: "integer", nullable: false),
+                    Kcal = table.Column<int>(type: "integer", nullable: false),
+                    DurationMin = table.Column<int>(type: "integer", nullable: false),
+                    DistanceKm = table.Column<decimal>(type: "numeric(6,2)", nullable: true),
+                    AvgHr = table.Column<int>(type: "integer", nullable: true),
+                    MaxHr = table.Column<int>(type: "integer", nullable: true),
+                    ElevationM = table.Column<decimal>(type: "numeric(7,2)", nullable: true),
+                    Steps = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -126,11 +127,11 @@ namespace EzFit.Migrations
                 name: "NutritionData",
                 columns: table => new
                 {
-                    EntryId = table.Column<int>(type: "int", nullable: false),
-                    Kcal = table.Column<int>(type: "int", nullable: false),
-                    Protein = table.Column<decimal>(type: "decimal(6,2)", nullable: false),
-                    Fats = table.Column<decimal>(type: "decimal(6,2)", nullable: false),
-                    Carbs = table.Column<decimal>(type: "decimal(6,2)", nullable: false)
+                    EntryId = table.Column<int>(type: "integer", nullable: false),
+                    Kcal = table.Column<int>(type: "integer", nullable: false),
+                    Protein = table.Column<decimal>(type: "numeric(6,2)", nullable: false),
+                    Fats = table.Column<decimal>(type: "numeric(6,2)", nullable: false),
+                    Carbs = table.Column<decimal>(type: "numeric(6,2)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -147,12 +148,12 @@ namespace EzFit.Migrations
                 name: "SleepData",
                 columns: table => new
                 {
-                    EntryId = table.Column<int>(type: "int", nullable: false),
-                    TotalMin = table.Column<int>(type: "int", nullable: false),
-                    DeepMin = table.Column<int>(type: "int", nullable: true),
-                    RemMin = table.Column<int>(type: "int", nullable: true),
-                    LightMin = table.Column<int>(type: "int", nullable: true),
-                    Score = table.Column<int>(type: "int", nullable: true)
+                    EntryId = table.Column<int>(type: "integer", nullable: false),
+                    TotalMin = table.Column<int>(type: "integer", nullable: false),
+                    DeepMin = table.Column<int>(type: "integer", nullable: true),
+                    RemMin = table.Column<int>(type: "integer", nullable: true),
+                    LightMin = table.Column<int>(type: "integer", nullable: true),
+                    Score = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {

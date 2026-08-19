@@ -2,6 +2,8 @@
 using EzFit.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Controllers
@@ -26,6 +28,17 @@ namespace EzFit.Controllers
         {
             var summary = await _dayService.GetDaySummaryAsync(HardcodedUserId, date);
             return Ok(summary);
+        }
+
+        // GET api/day/list?count=7
+        [HttpGet("list")]
+        public async Task<ActionResult<List<DaySummaryDto>>> GetRecentDays([FromQuery] int count, CancellationToken cancellationToken)
+        {
+            if (count <= 0) count = 7;
+            if (count > 30) count = 30;
+
+            var summaries = await _dayService.GetRecentDaySummariesAsync(HardcodedUserId, count, cancellationToken);
+            return Ok(summaries);
         }
     }
 }

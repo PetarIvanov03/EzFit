@@ -3,6 +3,9 @@ using EzFit.Entities;
 using EzFit.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EzFit.Repositories
@@ -39,6 +42,21 @@ namespace EzFit.Repositories
             }
 
             return day;
+        }
+
+        public async Task<List<Day>> GetRecentByUserAsync(int userId, int count, CancellationToken cancellationToken = default)
+        {
+            return await _context.Days
+                .Include(d => d.Entries)
+                    .ThenInclude(e => e.NutritionData)
+                .Include(d => d.Entries)
+                    .ThenInclude(e => e.ActivityData)
+                .Include(d => d.Entries)
+                    .ThenInclude(e => e.SleepData)
+                .Where(d => d.UserId == userId)
+                .OrderByDescending(d => d.Date)
+                .Take(count)
+                .ToListAsync(cancellationToken);
         }
     }
 }
