@@ -30,7 +30,7 @@ namespace EzFit.Services
         {
             await ValidateDimensionsAsync(imageStream, cancellationToken);
 
-            using var img = await Image.LoadAsync(imageStream, cancellationToken);
+            using var img = await LoadImageAsync(imageStream, cancellationToken);
 
             var originalWidth = img.Width;
             var originalHeight = img.Height;
@@ -84,15 +84,19 @@ namespace EzFit.Services
         // before Image.LoadAsync would decode the full pixel buffer into memory.
         private async Task ValidateDimensionsAsync(Stream imageStream, CancellationToken cancellationToken)
         {
-            var info = await Image.IdentifyAsync(imageStream, cancellationToken);
+            ImageInfo info;
+            try
+            {
+                info = await Image.IdentifyAsync(imageStream, cancellationToken);
+            }
+            catch (Exception ex) when (ex is UnknownImageFormatException || ex is InvalidImageContentException)
+            {
+                throw new ImageValidationException("Unrecognized or invalid image format.", ex);
+            }
+
             if (imageStream.CanSeek)
             {
                 imageStream.Position = 0;
-            }
-
-            if (info is null)
-            {
-                throw new ImageValidationException("Unrecognized image format.");
             }
 
             if (info.Width > _uploadsOptions.MaxDimension || info.Height > _uploadsOptions.MaxDimension)
@@ -106,6 +110,20 @@ namespace EzFit.Services
             {
                 throw new ImageValidationException(
                     $"Image resolution exceeds the maximum allowed ({_uploadsOptions.MaxPixels} pixels).");
+            }
+        }
+
+        // Image.LoadAsync can still throw on a file whose header parsed cleanly but whose
+        // body is corrupt/truncated — map that to the same 400 path as a bad header.
+        private static async Task<Image> LoadImageAsync(Stream imageStream, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await Image.LoadAsync(imageStream, cancellationToken);
+            }
+            catch (Exception ex) when (ex is UnknownImageFormatException || ex is InvalidImageContentException)
+            {
+                throw new ImageValidationException("Unrecognized or invalid image format.", ex);
             }
         }
     }

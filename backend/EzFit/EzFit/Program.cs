@@ -60,11 +60,16 @@ namespace EzFit
             // A whole decoded frame is one contiguous allocation; cap it well above
             // MaxPixels (raw RGBA32) so legitimate uploads still decode, but bound the
             // worst case a malicious/corrupt file can force onto the 512 MB container.
+            // Floor keeps small configs usable; ceiling means a future config edit can't
+            // push this past what the container can survive alongside everything else.
             const int BytesPerPixel = 4;
             const int DecodeSafetyFactor = 3;
-            var allocationLimitMb = (int)Math.Max(
-                64,
-                uploadsOptions.MaxPixels * BytesPerPixel * DecodeSafetyFactor / (1024 * 1024));
+            const int MinAllocationLimitMb = 64;
+            const int MaxAllocationLimitMb = 256;
+            var allocationLimitMb = (int)Math.Clamp(
+                uploadsOptions.MaxPixels * BytesPerPixel * DecodeSafetyFactor / (1024 * 1024),
+                MinAllocationLimitMb,
+                MaxAllocationLimitMb);
 
             Configuration.Default.MemoryAllocator = MemoryAllocator.Create(new MemoryAllocatorOptions
             {

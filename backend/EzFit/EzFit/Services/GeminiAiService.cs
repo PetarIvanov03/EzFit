@@ -111,23 +111,61 @@ namespace EzFit.Services
             };
         }
 
-        private static List<AiExtractionResult> ParseFunctionCalls(string responseBody)
+        // Gemini can legitimately return a body with no usable candidate (safety block,
+        // token limit, empty response) — every step here is defensive so that case
+        // surfaces as a rejection the client can act on instead of an unhandled 500.
+        private List<AiExtractionResult> ParseFunctionCalls(string responseBody)
         {
             var results = new List<AiExtractionResult>();
 
             using var doc = JsonDocument.Parse(responseBody);
-            var responseParts = doc.RootElement
-                .GetProperty("candidates")[0]
-                .GetProperty("content")
-                .GetProperty("parts");
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("promptFeedback", out var promptFeedback) &&
+                promptFeedback.TryGetProperty("blockReason", out var blockReasonElement))
+            {
+                var blockReason = blockReasonElement.GetString() ?? "unknown";
+                _logger.LogWarning("Gemini blocked the request: {BlockReason}", blockReason);
+                results.Add(RejectionResult($"The AI declined to process this input ({blockReason})."));
+                return results;
+            }
+
+            if (!root.TryGetProperty("candidates", out var candidates) ||
+                candidates.ValueKind != JsonValueKind.Array ||
+                candidates.GetArrayLength() == 0)
+            {
+                _logger.LogWarning("Gemini response contained no candidates.");
+                results.Add(RejectionResult("The AI did not return a usable response."));
+                return results;
+            }
+
+            var candidate = candidates[0];
+
+            if (candidate.TryGetProperty("finishReason", out var finishReasonElement))
+            {
+                var finishReason = finishReasonElement.GetString();
+                if (!string.IsNullOrEmpty(finishReason) && finishReason != "STOP")
+                {
+                    _logger.LogWarning("Gemini candidate finished with reason {FinishReason}", finishReason);
+                }
+            }
+
+            if (!candidate.TryGetProperty("content", out var contentElement) ||
+                !contentElement.TryGetProperty("parts", out var responseParts) ||
+                responseParts.ValueKind != JsonValueKind.Array)
+            {
+                results.Add(RejectionResult("The AI did not return any extractable content."));
+                return results;
+            }
 
             foreach (var part in responseParts.EnumerateArray())
             {
                 if (!part.TryGetProperty("functionCall", out var functionCall))
                     continue; // this part is plain text, not a tool call — skip it
 
-                var name = functionCall.GetProperty("name").GetString();
-                var args = functionCall.GetProperty("args");
+                var name = functionCall.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+                if (!functionCall.TryGetProperty("args", out var args))
+                    continue;
 
                 var result = new AiExtractionResult
                 {
@@ -163,8 +201,19 @@ namespace EzFit.Services
                 results.Add(result);
             }
 
+            if (results.Count == 0)
+            {
+                results.Add(RejectionResult("The AI did not recognize any fitness data in this input."));
+            }
+
             return results;
         }
+
+        private static AiExtractionResult RejectionResult(string reason) => new()
+        {
+            ToolType = AiToolType.RejectEntry,
+            RejectionReason = reason
+        };
 
         private static AiToolType MapToolName(string? name)
         {
