@@ -47,7 +47,7 @@ namespace EzFit
             {
                 options.AddPolicy("Frontend", policy =>
                 {
-                    policy.WithOrigins("http://localhost:5173")
+                    policy.WithOrigins("http://localhost:5173", "https://ez-fit.vercel.app")
                           .AllowAnyHeader()
                           .AllowAnyMethod();
                 });
