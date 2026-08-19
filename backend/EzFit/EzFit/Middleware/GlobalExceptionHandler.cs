@@ -17,6 +17,7 @@ namespace EzFit.Middleware
         {
             [typeof(ImageValidationException)] = StatusCodes.Status400BadRequest,
             [typeof(AiServiceException)] = StatusCodes.Status502BadGateway,
+            [typeof(GeminiRateLimitException)] = StatusCodes.Status429TooManyRequests,
         };
 
         private readonly IProblemDetailsService _problemDetailsService;
@@ -41,9 +42,11 @@ namespace EzFit.Middleware
 
             httpContext.Response.StatusCode = statusCode;
 
-            // Validation messages are safe to surface (they describe the bad request).
-            // Everything else only gets a detail in Development — never in prod, never a stack trace.
-            var detail = statusCode == StatusCodes.Status400BadRequest
+            // Validation (400) and quota (429) messages are deliberately written to be
+            // safe/actionable for the client, so they're surfaced in every environment.
+            // Everything else only gets a detail in Development — never in prod, never a
+            // stack trace, since those messages weren't written with an end user in mind.
+            var detail = statusCode == StatusCodes.Status400BadRequest || statusCode == StatusCodes.Status429TooManyRequests
                 ? exception.Message
                 : _environment.IsDevelopment() ? exception.ToString() : null;
 

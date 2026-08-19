@@ -52,6 +52,7 @@ namespace EzFit
             builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection(RateLimitingOptions.SectionName));
             builder.Services.Configure<SecurityOptions>(builder.Configuration.GetSection(SecurityOptions.SectionName));
             builder.Services.Configure<CurrentUserOptions>(builder.Configuration.GetSection(CurrentUserOptions.SectionName));
+            builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
 
             var uploadsOptions = builder.Configuration.GetSection(UploadsOptions.SectionName).Get<UploadsOptions>()
                 ?? new UploadsOptions();
@@ -63,18 +64,17 @@ namespace EzFit
             // Floor keeps small configs usable; ceiling means a future config edit can't
             // push this past what the container can survive alongside everything else.
             //
-            // Factor of 2 (not 3) keeps this under the 256 MB ceiling at the current
-            // MaxPixels (25M -> 190 MB) so the derivation still tracks the config instead
-            // of being permanently clamped to a flat number. Headroom check for one
-            // request on the 512 MB container: 190 MB decode + ~100-150 MB .NET/ASP.NET
-            // Core runtime baseline + a few MB for the Npgsql pool + a few more for the
-            // WebP byte arrays LogController buffers for the Gemini call (already-
-            // downscaled ~1000px-wide tiles, so tens of MB at worst even at
-            // MaxTilesPerRequest) leaves comfortable slack. The ceiling stays at 256 MB
-            // rather than dropping further: it's sized for one worst-case decode, and the
-            // real unbounded risk is concurrent requests each decoding at once, which this
-            // allocator setting was never able to bound (it caps one buffer, not the
-            // process) — that needs a concurrency limit, not a smaller per-decode ceiling.
+            // At MaxPixels = 50M (raised to comfortably clear a 4032x3024 phone photo),
+            // this computes to 50M * 4 * 2 = 400,000,000 bytes ~= 381 MB, so the clamp
+            // to the 256 MB ceiling binds again — the derivation is "live" in the sense
+            // that it reacts to MaxPixels, but above ~33.5M pixels it's dead weight: any
+            // MaxPixels from here up produces the same 256 MB result. Left as-is rather
+            // than raising the ceiling to match: 256 MB was already sized as the worst
+            // case this container can spend on ONE decode buffer alongside the .NET/
+            // ASP.NET Core runtime baseline (~100-150 MB), the Npgsql pool, and the WebP
+            // byte arrays LogController buffers for the Gemini call — raising it further
+            // erodes that margin for a case (uploads near 50M pixels) that's rare relative
+            // to the typical phone photo or tall screenshot this app actually receives.
             const int BytesPerPixel = 4;
             const int DecodeSafetyFactor = 2;
             const int MinAllocationLimitMb = 64;
@@ -171,6 +171,16 @@ namespace EzFit
             {
                 app.Logger.LogWarning(
                     "Security:ApiKey is not configured — the /api endpoints are not protected by the shared API key gate.");
+            }
+
+            // Checked against the raw config key, not the bound GeminiOptions.Model value —
+            // comparing the resolved value to GeminiOptions.FallbackModel would misfire if
+            // someone ever configures that exact string on purpose.
+            if (string.IsNullOrWhiteSpace(builder.Configuration[$"{GeminiOptions.SectionName}:Model"]))
+            {
+                app.Logger.LogWarning(
+                    "Gemini:Model is not configured — falling back to the hardcoded default '{FallbackModel}'.",
+                    GeminiOptions.FallbackModel);
             }
 
             // Render terminates TLS and forwards plain HTTP; this must run before anything

@@ -1,11 +1,13 @@
 using EzFit.DTOs.Ai;
 using EzFit.Exceptions;
+using EzFit.Options;
 using EzFit.Services.Ai;
 using EzFit.Services.Interfaces;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -16,24 +18,35 @@ namespace EzFit.Services
 {
     public class GeminiAiService : IAiService
     {
+        // GeminiAiService is Scoped (new instance per request), so this has to be static
+        // to actually log only once across the process lifetime rather than once per request.
+        private static int _hasLoggedModel;
+
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IConfiguration _configuration;
+        private readonly GeminiOptions _geminiOptions;
         private readonly ILogger<GeminiAiService> _logger;
 
-        public GeminiAiService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<GeminiAiService> logger)
+        public GeminiAiService(IHttpClientFactory httpClientFactory, IOptions<GeminiOptions> geminiOptions, ILogger<GeminiAiService> logger)
         {
             _httpClientFactory = httpClientFactory;
-            _configuration = configuration;
+            _geminiOptions = geminiOptions.Value;
             _logger = logger;
         }
 
         public async Task<AiExtractionResponse> ExtractAsync(string? message, List<byte[]> images, CancellationToken cancellationToken = default)
         {
-            var apiKey = _configuration["Gemini:ApiKey"];
-            var model = _configuration["Gemini:Model"] ?? "gemini-3.5-flash";
+            var apiKey = _geminiOptions.ApiKey;
+            var model = _geminiOptions.Model;
 
             if (string.IsNullOrEmpty(apiKey))
                 throw new InvalidOperationException("Gemini:ApiKey is missing.");
+
+            // Verifiable-from-Render-logs record of which model is actually serving traffic,
+            // without spamming a line on every single request.
+            if (Interlocked.Exchange(ref _hasLoggedModel, 1) == 0)
+            {
+                _logger.LogInformation("Using Gemini model {Model} for AI extraction requests.", model);
+            }
 
             var referenceDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
 
@@ -100,6 +113,14 @@ namespace EzFit.Services
 
             if (!response.IsSuccessStatusCode)
             {
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    // Expected operationally on the free tier, not a defect — warning, not error.
+                    _logger.LogWarning("Gemini quota exhausted (429): {Body}", responseBody);
+                    throw new GeminiRateLimitException(
+                        "The AI service's usage quota is exhausted for now. Please try again later.");
+                }
+
                 _logger.LogError("Gemini request failed with status {StatusCode}: {Body}", (int)response.StatusCode, responseBody);
                 throw new AiServiceException($"Gemini request failed with status {(int)response.StatusCode}.");
             }

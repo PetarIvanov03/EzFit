@@ -1,8 +1,11 @@
 import { useDayList } from "@/api/days"
 import { DaySummaryCard } from "@/components/days/DaySummaryCard"
 import { Skeleton } from "@/components/ui/skeleton"
+import { usePageTitle } from "@/hooks/usePageTitle"
 
 export function DayListPage() {
+  usePageTitle("Days · EzFit")
+
   const { data, isPending, isError, error } = useDayList(7)
 
   return (

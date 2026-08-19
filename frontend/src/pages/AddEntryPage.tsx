@@ -1,16 +1,15 @@
 import { useRef, useState } from "react"
-import { Paperclip, SendHorizontal } from "lucide-react"
+import { Loader2, Paperclip, SendHorizontal } from "lucide-react"
 import { useLogEntry } from "@/api/log"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
 import { EntryCard } from "@/components/entries/EntryCard"
 import { AttachmentThumbnail } from "@/components/composer/AttachmentThumbnail"
-import { todayLocalDateString } from "@/lib/format"
 import { downscaleImages, validateImageDimensions } from "@/lib/image"
+import { getApiErrorMessage } from "@/lib/errors"
 import { useIsFinePointer } from "@/hooks/useIsFinePointer"
+import { usePageTitle } from "@/hooks/usePageTitle"
 
 // Same underlying file re-picked from the OS dialog gets a fresh File
 // instance each time, so identity dedup has to go by these fields instead.
@@ -19,7 +18,8 @@ function fileKey(file: File) {
 }
 
 export function AddEntryPage() {
-  const [date, setDate] = useState(todayLocalDateString())
+  usePageTitle("Add Entry · EzFit")
+
   const [text, setText] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [isProcessingImages, setIsProcessingImages] = useState(false)
@@ -33,7 +33,8 @@ export function AddEntryPage() {
   // so send only ever unlocks once there's text, regardless of attachments.
   const hasText = text.trim().length > 0
   const needsDescriptionHint = !hasText && files.length > 0
-  const canSubmit = hasText && !isProcessingImages
+  const isBusy = isProcessingImages || logEntry.isPending
+  const canSubmit = hasText && !isBusy
 
   function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(e.target.files ?? [])
@@ -91,7 +92,7 @@ export function AddEntryPage() {
     }
 
     logEntry.mutate(
-      { date, message: text.trim() || undefined, images: imagesToSend },
+      { message: text.trim() || undefined, images: imagesToSend },
       {
         onSuccess: () => {
           setText("")
@@ -113,17 +114,6 @@ export function AddEntryPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="entry-date">Date</Label>
-              <Input
-                id="entry-date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-fit"
-              />
-            </div>
-
             {files.length > 0 && (
               // gap-3 (not gap-2) so each thumbnail's enlarged remove hit-area
               // (see AttachmentThumbnail) has room on the right without
@@ -175,10 +165,14 @@ export function AddEntryPage() {
                 type="submit"
                 size="icon"
                 className="shrink-0"
-                aria-label="Send"
-                disabled={!canSubmit || logEntry.isPending}
+                aria-label={isBusy ? "Sending" : "Send"}
+                disabled={!canSubmit}
               >
-                <SendHorizontal className="size-6" />
+                {isBusy ? (
+                  <Loader2 className="size-6 animate-spin" />
+                ) : (
+                  <SendHorizontal className="size-6" />
+                )}
               </Button>
             </div>
 
@@ -189,17 +183,20 @@ export function AddEntryPage() {
             )}
 
             {isProcessingImages && (
-              <p className="text-sm text-muted-foreground">Processing images...</p>
+              <p className="text-sm text-muted-foreground">Preparing your images...</p>
+            )}
+
+            {!isProcessingImages && logEntry.isPending && (
+              <p className="text-sm text-muted-foreground">
+                Sending to the AI — this can take a while, especially if the backend has been idle
+                and needs to cold-start.
+              </p>
             )}
 
             {imageError && <p className="text-sm text-destructive">{imageError}</p>}
 
             {logEntry.isError && (
-              <p className="text-sm text-destructive">
-                {logEntry.error instanceof Error
-                  ? logEntry.error.message
-                  : "Submission failed. Please try again."}
-              </p>
+              <p className="text-sm text-destructive">{getApiErrorMessage(logEntry.error)}</p>
             )}
           </form>
         </CardContent>

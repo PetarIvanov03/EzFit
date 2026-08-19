@@ -5,10 +5,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EntryCard } from "@/components/entries/EntryCard"
 import { entryTypeStyles, entryTypeOrder } from "@/components/entries/entry-type-styles"
 import { formatDateHeading, formatMinutes } from "@/lib/format"
+import { usePageTitle } from "@/hooks/usePageTitle"
 
 export function DayDetailPage() {
   const { date } = useParams<{ date: string }>()
   const { data: day, isPending, isError, error } = useDay(date ?? "")
+
+  // Same formatting/fallback as the <h1> below — one is the tab title, one is the heading.
+  usePageTitle(date ? `${formatDateHeading(date)} · EzFit` : "Day · EzFit")
 
   return (
     <div className="flex flex-col gap-6">
