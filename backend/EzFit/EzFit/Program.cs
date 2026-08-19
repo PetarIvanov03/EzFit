@@ -36,7 +36,11 @@ namespace EzFit
             builder.Services.AddScoped<IAiService, GeminiAiService>();
 
             builder.Services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsqlOptions => npgsqlOptions
+            .CommandTimeout(30)
+            .EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
 
             builder.Services.AddHttpClient("Gemini", client =>
             {
