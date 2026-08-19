@@ -8,6 +8,7 @@ using EzFit.Services.Mappers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Webp;
@@ -31,6 +32,7 @@ namespace EzFit.Controllers
         private readonly IEntryService _entryService;
         private readonly ICurrentUserProvider _currentUserProvider;
         private readonly UploadsOptions _uploadsOptions;
+        private readonly ILogger<LogController> _logger;
 
         public LogController(
             IImageService imageService,
@@ -38,7 +40,8 @@ namespace EzFit.Controllers
             IAiService aiService,
             IEntryService entryService,
             ICurrentUserProvider currentUserProvider,
-            IOptions<UploadsOptions> uploadsOptions)
+            IOptions<UploadsOptions> uploadsOptions,
+            ILogger<LogController> logger)
         {
             _imageService = imageService;
             _fileStorageService = fileStorageService;
@@ -46,6 +49,7 @@ namespace EzFit.Controllers
             _entryService = entryService;
             _currentUserProvider = currentUserProvider;
             _uploadsOptions = uploadsOptions.Value;
+            _logger = logger;
         }
 
         // POST api/log?date=2026-08-18  (form-data: message=<text>, images=<file(s)>)
@@ -79,75 +83,112 @@ namespace EzFit.Controllers
             var imageBytesForAi = new List<byte[]>();
             var savedBaseNames = new List<string>();
 
-            if (images is not null)
+            // Files get saved to disk as each one is processed, before the response is known
+            // to succeed. Any exit below that isn't the final `return Ok` — the tile-limit
+            // rejection, an ImageValidationException from a later file, an AiServiceException,
+            // whatever — leaves those saves orphaned with no DB row pointing at them unless
+            // this cleans them up. `succeeded` tracks that in one place instead of duplicating
+            // a cleanup call at every early-return/throw site.
+            var succeeded = false;
+            try
             {
-                var totalTiles = 0;
-
-                foreach (var image in images)
+                if (images is not null)
                 {
-                    var tiles = await _imageService.ProcessAsync(image.OpenReadStream(), cancellationToken);
+                    var totalTiles = 0;
 
-                    // Tallied across all files in the request, not per file — check before
-                    // decoding the next image so an over-limit request stops early instead
-                    // of paying for every file's decode before rejecting.
-                    totalTiles += tiles.Count;
-                    if (totalTiles > _uploadsOptions.MaxTilesPerRequest)
+                    foreach (var image in images)
                     {
-                        foreach (var tile in tiles)
+                        var tiles = await _imageService.ProcessAsync(image.OpenReadStream(), cancellationToken);
+
+                        // Tallied across all files in the request, not per file — check before
+                        // decoding the next image so an over-limit request stops early instead
+                        // of paying for every file's decode before rejecting.
+                        totalTiles += tiles.Count;
+                        if (totalTiles > _uploadsOptions.MaxTilesPerRequest)
                         {
-                            tile.Dispose();
+                            foreach (var tile in tiles)
+                            {
+                                tile.Dispose();
+                            }
+
+                            return BadRequest(
+                                $"These images would require too many tiles to process ({totalTiles} > {_uploadsOptions.MaxTilesPerRequest}). " +
+                                "Split the upload into fewer or shorter screenshots.");
                         }
 
-                        return BadRequest(
-                            $"These images would require too many tiles to process ({totalTiles} > {_uploadsOptions.MaxTilesPerRequest}). " +
-                            "Split the upload into fewer or shorter screenshots.");
+                        // Encode a copy for the AI call before FileStorageService disposes the tiles
+                        foreach (var tile in tiles)
+                        {
+                            using var ms = new MemoryStream();
+                            await tile.SaveAsync(ms, new WebpEncoder(), cancellationToken);
+                            imageBytesForAi.Add(ms.ToArray());
+                        }
+
+                        var baseName = _fileStorageService.GenerateBaseName(_currentUserProvider.UserId);
+                        await _fileStorageService.SaveAsync(baseName, tiles, cancellationToken); // disposes tiles internally
+
+                        savedBaseNames.Add(baseName);
                     }
-
-                    // Encode a copy for the AI call before FileStorageService disposes the tiles
-                    foreach (var tile in tiles)
-                    {
-                        using var ms = new MemoryStream();
-                        await tile.SaveAsync(ms, new WebpEncoder(), cancellationToken);
-                        imageBytesForAi.Add(ms.ToArray());
-                    }
-
-                    var baseName = _fileStorageService.GenerateBaseName(_currentUserProvider.UserId);
-                    await _fileStorageService.SaveAsync(baseName, tiles, cancellationToken); // disposes tiles internally
-
-                    savedBaseNames.Add(baseName);
                 }
-            }
 
-            var aiResponse = await _aiService.ExtractAsync(message, imageBytesForAi, cancellationToken);
-            var imagePath = savedBaseNames.Count > 0 ? string.Join(",", savedBaseNames) : null;
+                var aiResponse = await _aiService.ExtractAsync(message, imageBytesForAi, cancellationToken);
+                var imagePath = savedBaseNames.Count > 0 ? string.Join(",", savedBaseNames) : null;
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var result = new LogResultDto();
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var result = new LogResultDto();
 
-            foreach (var extraction in aiResponse.Results)
-            {
-                var dto = AiResponseMapper.ToCreateEntryDto(extraction);
-
-                if (dto is null)
+                foreach (var extraction in aiResponse.Results)
                 {
-                    result.RejectionReasons.Add(extraction.RejectionReason ?? "Unrecognized input.");
-                    continue;
+                    var dto = AiResponseMapper.ToCreateEntryDto(extraction);
+
+                    if (dto is null)
+                    {
+                        result.RejectionReasons.Add(extraction.RejectionReason ?? "Unrecognized input.");
+                        continue;
+                    }
+
+                    dto.ImagePath = imagePath;
+                    dto.AiRawResponse = aiResponse.RawResponseJson;
+
+                    // Each entry may resolve to a different day if the AI recognized a
+                    // date reference; entries without one default to today.
+                    var targetDate = dto.OccurredAt.HasValue
+                        ? DateOnly.FromDateTime(dto.OccurredAt.Value)
+                        : today;
+
+                    var entryDto = await _entryService.AddEntryAsync(_currentUserProvider.UserId, targetDate, dto, cancellationToken);
+                    result.CreatedEntries.Add(entryDto);
                 }
 
-                dto.ImagePath = imagePath;
-                dto.AiRawResponse = aiResponse.RawResponseJson;
-
-                // Each entry may resolve to a different day if the AI recognized a
-                // date reference; entries without one default to today.
-                var targetDate = dto.OccurredAt.HasValue
-                    ? DateOnly.FromDateTime(dto.OccurredAt.Value)
-                    : today;
-
-                var entryDto = await _entryService.AddEntryAsync(_currentUserProvider.UserId, targetDate, dto, cancellationToken);
-                result.CreatedEntries.Add(entryDto);
+                succeeded = true;
+                return Ok(result);
             }
+            finally
+            {
+                if (!succeeded && savedBaseNames.Count > 0)
+                {
+                    await CleanupSavedFilesAsync(savedBaseNames);
+                }
+            }
+        }
 
-            return Ok(result);
+        // Best-effort: a cleanup failure must never mask the original error that triggered
+        // it, so every deletion is caught and logged rather than allowed to propagate.
+        // Uses CancellationToken.None because cleanup still has to run even when the
+        // request's own token is what caused the failure (e.g. client disconnect).
+        private async Task CleanupSavedFilesAsync(List<string> baseNames)
+        {
+            foreach (var baseName in baseNames)
+            {
+                try
+                {
+                    await _fileStorageService.DeleteAsync(baseName, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete orphaned upload files for base name {BaseName}.", baseName);
+                }
+            }
         }
     }
 }

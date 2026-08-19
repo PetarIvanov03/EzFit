@@ -70,7 +70,36 @@ export async function validateImageDimensions(file: File): Promise<ImageValidati
   return { valid: true }
 }
 
-// Downscales to ~1000px wide WebP client-side so upload size and backend decode
+// convertToBlob({ type: "image/webp" }) does NOT throw when the browser can't
+// encode WebP — per spec it silently returns image/png instead (Safari <16.4
+// has no OffscreenCanvas at all; some versions after that still can't encode
+// WebP). Checking blob.type after the fact is the only way to detect that, so
+// this tries WebP, falls back to universally-supported JPEG, and only gives
+// up (returning null) if neither actually produced what was asked for.
+async function encodeCanvas(canvas: OffscreenCanvas, fileNameBase: string): Promise<File | null> {
+  const webpBlob = await canvas.convertToBlob({ type: "image/webp" })
+  if (webpBlob.type === "image/webp") {
+    console.info(`Encoded "${fileNameBase}" as image/webp.`)
+    return new File([webpBlob], `${fileNameBase}.webp`, { type: "image/webp" })
+  }
+
+  console.warn(
+    `Browser silently downgraded "${fileNameBase}" from image/webp to ${webpBlob.type || "an unknown type"}; retrying as image/jpeg.`,
+  )
+
+  const jpegBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 })
+  if (jpegBlob.type === "image/jpeg") {
+    console.info(`Encoded "${fileNameBase}" as image/jpeg (WebP unsupported on this browser).`)
+    return new File([jpegBlob], `${fileNameBase}.jpg`, { type: "image/jpeg" })
+  }
+
+  console.warn(
+    `Browser could not encode "${fileNameBase}" as image/webp or image/jpeg (got ${jpegBlob.type || "an unknown type"}); keeping the original file.`,
+  )
+  return null
+}
+
+// Downscales to ~1000px wide client-side so upload size and backend decode
 // cost both drop roughly tenfold for the tall screenshots this app expects.
 //
 // Deliberately does NOT go through a regular <canvas> sized to the image's
@@ -107,13 +136,13 @@ export async function downscaleImage(file: File): Promise<File> {
     ctx.drawImage(bitmap, 0, 0)
     bitmap.close()
 
-    const blob = await canvas.convertToBlob({ type: "image/webp" })
-    if (!blob || blob.size === 0) {
-      throw new Error("convertToBlob produced an empty result")
+    const baseName = file.name.replace(/\.[^.]+$/, "")
+    const encoded = await encodeCanvas(canvas, baseName)
+    if (!encoded || encoded.size === 0) {
+      throw new Error("Canvas encoding produced no usable output in any supported format")
     }
 
-    const newName = file.name.replace(/\.[^.]+$/, "") + ".webp"
-    return new File([blob], newName, { type: "image/webp" })
+    return encoded
   } catch (err) {
     console.warn(`Falling back to original file for "${file.name}": client-side downscale failed.`, err)
     return file

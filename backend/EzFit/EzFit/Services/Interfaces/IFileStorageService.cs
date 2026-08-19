@@ -9,5 +9,6 @@ namespace EzFit.Services.Interfaces
     {
         string GenerateBaseName(int userId);
         Task SaveAsync(string baseName, List<Image> images, CancellationToken cancellationToken = default);
+        Task DeleteAsync(string baseName, CancellationToken cancellationToken = default);
     }
 }

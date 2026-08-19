@@ -29,7 +29,14 @@ export function AttachmentThumbnail({ file, onRemove }: AttachmentThumbnailProps
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${file.name}`}
-        className="absolute -top-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full border border-input bg-background text-foreground shadow-xs hover:bg-accent"
+        // Visible badge stays a small 24px circle so it doesn't dominate an
+        // 80px tile, but the actual hit target is grown via ::before to ~40px
+        // (WCAG 2.5.5 floor is 24px, iOS HIG recommends 44px — full 44px would
+        // spill past the 12px gap into the next thumbnail's tile, so this
+        // trades down to 40px: 8px/10px on the top/left where the tile's own
+        // image absorbs the overlap harmlessly, only 6px to the right where
+        // the neighbouring thumbnail's hit area has to be respected).
+        className="absolute -top-1 -right-1 flex size-6 items-center justify-center rounded-full border border-input bg-background text-foreground shadow-xs before:absolute before:content-[''] before:[inset:-8px_-6px_-8px_-10px] hover:bg-accent"
       >
         <X className="size-3.5" />
       </button>

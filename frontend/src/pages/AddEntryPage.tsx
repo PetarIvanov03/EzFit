@@ -10,6 +10,7 @@ import { EntryCard } from "@/components/entries/EntryCard"
 import { AttachmentThumbnail } from "@/components/composer/AttachmentThumbnail"
 import { todayLocalDateString } from "@/lib/format"
 import { downscaleImages, validateImageDimensions } from "@/lib/image"
+import { useIsFinePointer } from "@/hooks/useIsFinePointer"
 
 // Same underlying file re-picked from the OS dialog gets a fresh File
 // instance each time, so identity dedup has to go by these fields instead.
@@ -26,6 +27,7 @@ export function AddEntryPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const logEntry = useLogEntry()
+  const isFinePointer = useIsFinePointer()
 
   // Images alone are not a valid submission — the backend rejects that too —
   // so send only ever unlocks once there's text, regardless of attachments.
@@ -56,6 +58,10 @@ export function AddEntryPage() {
   }
 
   function handleTextKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Touch devices have no Shift+Enter, so Enter must stay a plain newline
+    // there — the send button is the only submit path on those devices.
+    if (!isFinePointer) return
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       e.currentTarget.form?.requestSubmit()
@@ -119,7 +125,10 @@ export function AddEntryPage() {
             </div>
 
             {files.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              // gap-3 (not gap-2) so each thumbnail's enlarged remove hit-area
+              // (see AttachmentThumbnail) has room on the right without
+              // reaching the next tile — see the comment there for the math.
+              <div className="flex gap-3 overflow-x-auto pb-1">
                 {files.map((file) => (
                   <AttachmentThumbnail
                     key={fileKey(file)}

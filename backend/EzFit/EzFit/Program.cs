@@ -62,8 +62,21 @@ namespace EzFit
             // worst case a malicious/corrupt file can force onto the 512 MB container.
             // Floor keeps small configs usable; ceiling means a future config edit can't
             // push this past what the container can survive alongside everything else.
+            //
+            // Factor of 2 (not 3) keeps this under the 256 MB ceiling at the current
+            // MaxPixels (25M -> 190 MB) so the derivation still tracks the config instead
+            // of being permanently clamped to a flat number. Headroom check for one
+            // request on the 512 MB container: 190 MB decode + ~100-150 MB .NET/ASP.NET
+            // Core runtime baseline + a few MB for the Npgsql pool + a few more for the
+            // WebP byte arrays LogController buffers for the Gemini call (already-
+            // downscaled ~1000px-wide tiles, so tens of MB at worst even at
+            // MaxTilesPerRequest) leaves comfortable slack. The ceiling stays at 256 MB
+            // rather than dropping further: it's sized for one worst-case decode, and the
+            // real unbounded risk is concurrent requests each decoding at once, which this
+            // allocator setting was never able to bound (it caps one buffer, not the
+            // process) — that needs a concurrency limit, not a smaller per-decode ceiling.
             const int BytesPerPixel = 4;
-            const int DecodeSafetyFactor = 3;
+            const int DecodeSafetyFactor = 2;
             const int MinAllocationLimitMb = 64;
             const int MaxAllocationLimitMb = 256;
             var allocationLimitMb = (int)Math.Clamp(

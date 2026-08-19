@@ -59,6 +59,25 @@ namespace EzFit.Services
             }
         }
 
+        // baseName has no extension/tile suffix of its own (see SaveAsync), so a single
+        // base name may have saved as either "{baseName}.{ext}" or several
+        // "{baseName}_tile{n}.{ext}" files — a prefix match deletes whichever it was.
+        public Task DeleteAsync(string baseName, CancellationToken cancellationToken = default)
+        {
+            if (!Directory.Exists(_options.UploadsRoot))
+            {
+                return Task.CompletedTask;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(_options.UploadsRoot, $"{baseName}*"))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Delete(path);
+            }
+
+            return Task.CompletedTask;
+        }
+
         private (string Extension, Func<int, ImageEncoder> CreateEncoder) GetFormat()
         {
             return EncodersByFormat.TryGetValue(_options.Format, out var format)
