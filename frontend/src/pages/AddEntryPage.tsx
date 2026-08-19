@@ -1,27 +1,91 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { Paperclip, SendHorizontal } from "lucide-react"
 import { useLogEntry } from "@/api/log"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { EntryCard } from "@/components/entries/EntryCard"
+import { AttachmentThumbnail } from "@/components/composer/AttachmentThumbnail"
 import { todayLocalDateString } from "@/lib/format"
+import { downscaleImages, validateImageDimensions } from "@/lib/image"
+
+// Same underlying file re-picked from the OS dialog gets a fresh File
+// instance each time, so identity dedup has to go by these fields instead.
+function fileKey(file: File) {
+  return `${file.name}:${file.size}:${file.lastModified}`
+}
 
 export function AddEntryPage() {
   const [date, setDate] = useState(todayLocalDateString())
   const [text, setText] = useState("")
   const [files, setFiles] = useState<File[]>([])
+  const [isProcessingImages, setIsProcessingImages] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const logEntry = useLogEntry()
 
-  const canSubmit = text.trim().length > 0 || files.length > 0
+  // Images alone are not a valid submission — the backend rejects that too —
+  // so send only ever unlocks once there's text, regardless of attachments.
+  const hasText = text.trim().length > 0
+  const needsDescriptionHint = !hasText && files.length > 0
+  const canSubmit = hasText && !isProcessingImages
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? [])
+    if (selected.length > 0) {
+      setFiles((prev) => {
+        const seen = new Set(prev.map(fileKey))
+        const additions = selected.filter((file) => {
+          const key = fileKey(file)
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        return [...prev, ...additions]
+      })
+    }
+    // Reset so picking the exact same file(s) again still fires this handler.
+    e.target.value = ""
+  }
+
+  function handleRemoveFile(file: File) {
+    setFiles((prev) => prev.filter((f) => f !== file))
+  }
+
+  function handleTextKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      e.currentTarget.form?.requestSubmit()
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setImageError(null)
+
+    let imagesToSend: File[] | undefined
+
+    if (files.length > 0) {
+      setIsProcessingImages(true)
+      try {
+        for (const file of files) {
+          const result = await validateImageDimensions(file)
+          if (!result.valid) {
+            setImageError(result.message ?? "One of the selected images is too large.")
+            return
+          }
+        }
+        imagesToSend = await downscaleImages(files)
+      } finally {
+        setIsProcessingImages(false)
+      }
+    }
+
     logEntry.mutate(
-      { date, message: text.trim() || undefined, images: files.length > 0 ? files : undefined },
+      { date, message: text.trim() || undefined, images: imagesToSend },
       {
         onSuccess: () => {
           setText("")
@@ -42,7 +106,7 @@ export function AddEntryPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="entry-date">Date</Label>
               <Input
@@ -54,42 +118,72 @@ export function AddEntryPage() {
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="entry-text">Free text</Label>
-              <Textarea
-                id="entry-text"
-                placeholder="e.g. Had chicken and rice for lunch, then ran 5k this morning..."
-                rows={5}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-              />
-            </div>
+            {files.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {files.map((file) => (
+                  <AttachmentThumbnail
+                    key={fileKey(file)}
+                    file={file}
+                    onRemove={() => handleRemoveFile(file)}
+                  />
+                ))}
+              </div>
+            )}
 
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">OR</span>
-              <Separator className="flex-1" />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="entry-file">Screenshot upload</Label>
-              <Input
-                id="entry-file"
+            <div className="flex items-end gap-2 rounded-md border border-input bg-transparent p-2 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+              <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                onChange={handleFilesSelected}
+                className="hidden"
+                aria-label="Attach screenshots"
               />
-              {files.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {files.map((f) => f.name).join(", ")}
-                </p>
-              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                aria-label="Attach screenshots"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="size-6" />
+              </Button>
+
+              <Textarea
+                id="entry-text"
+                aria-label="Entry description"
+                placeholder="Describe it, or attach a screenshot..."
+                rows={1}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={handleTextKeyDown}
+                className="max-h-40 min-h-9 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1.5 text-base shadow-none focus-visible:ring-0"
+              />
+
+              <Button
+                type="submit"
+                size="icon"
+                className="shrink-0"
+                aria-label="Send"
+                disabled={!canSubmit || logEntry.isPending}
+              >
+                <SendHorizontal className="size-6" />
+              </Button>
             </div>
 
-            <Button type="submit" disabled={!canSubmit || logEntry.isPending} className="w-fit">
-              {logEntry.isPending ? "Submitting..." : "Submit for extraction"}
-            </Button>
+            {needsDescriptionHint && (
+              <p className="text-sm text-muted-foreground">
+                Add a short description alongside your screenshots — images alone aren't enough.
+              </p>
+            )}
+
+            {isProcessingImages && (
+              <p className="text-sm text-muted-foreground">Processing images...</p>
+            )}
+
+            {imageError && <p className="text-sm text-destructive">{imageError}</p>}
 
             {logEntry.isError && (
               <p className="text-sm text-destructive">

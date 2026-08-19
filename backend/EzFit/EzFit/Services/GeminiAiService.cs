@@ -144,6 +144,17 @@ namespace EzFit.Services
             if (candidate.TryGetProperty("finishReason", out var finishReasonElement))
             {
                 var finishReason = finishReasonElement.GetString();
+
+                // MAX_TOKENS can cut a functionCall's args mid-emission, leaving valid-looking
+                // but incomplete JSON — parsing that as real data would silently persist
+                // truncated numbers/dates instead of failing loudly.
+                if (finishReason == "MAX_TOKENS")
+                {
+                    _logger.LogWarning("Gemini candidate truncated by MAX_TOKENS; discarding any partial output.");
+                    results.Add(RejectionResult("The input was too large for the AI to fully process. Try uploading fewer or shorter screenshots."));
+                    return results;
+                }
+
                 if (!string.IsNullOrEmpty(finishReason) && finishReason != "STOP")
                 {
                     _logger.LogWarning("Gemini candidate finished with reason {FinishReason}", finishReason);
@@ -167,9 +178,17 @@ namespace EzFit.Services
                 if (!functionCall.TryGetProperty("args", out var args))
                     continue;
 
+                var toolType = MapToolName(name);
+                if (toolType is null)
+                {
+                    _logger.LogWarning("Gemini returned an unrecognized tool name: {ToolName}", name);
+                    results.Add(RejectionResult("The AI returned an unrecognized response. Please try again."));
+                    continue;
+                }
+
                 var result = new AiExtractionResult
                 {
-                    ToolType = MapToolName(name),
+                    ToolType = toolType.Value,
                     Confidence = GetOptionalDecimal(args, "confidence"),
                     NeedsReview = GetOptionalBool(args, "needs_review") ?? false,
                     RejectionReason = GetOptionalString(args, "reason"),
@@ -215,7 +234,7 @@ namespace EzFit.Services
             RejectionReason = reason
         };
 
-        private static AiToolType MapToolName(string? name)
+        private static AiToolType? MapToolName(string? name)
         {
             return name switch
             {
@@ -223,7 +242,7 @@ namespace EzFit.Services
                 "record_activity" => AiToolType.RecordActivity,
                 "record_sleep" => AiToolType.RecordSleep,
                 "reject_entry" => AiToolType.RejectEntry,
-                _ => throw new InvalidOperationException($"Unknown tool name returned by Gemini: {name}")
+                _ => null
             };
         }
 

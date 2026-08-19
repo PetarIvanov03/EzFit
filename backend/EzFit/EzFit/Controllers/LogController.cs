@@ -55,7 +55,7 @@ namespace EzFit.Controllers
             [FromForm] List<IFormFile>? images,
             CancellationToken cancellationToken)
         {
-            if (images is not null)
+            if (images is not null && images.Count > 0)
             {
                 if (images.Count > _uploadsOptions.MaxFileCount)
                 {
@@ -67,6 +67,13 @@ namespace EzFit.Controllers
                 {
                     return BadRequest($"'{oversizedImage.FileName}' exceeds the maximum file size of {_uploadsOptions.MaxFileSizeBytes} bytes.");
                 }
+
+                // Screenshots alone are ambiguous without user-provided context — enforced
+                // server-side since a frontend-only check is trivially bypassed.
+                if (string.IsNullOrWhiteSpace(message))
+                {
+                    return BadRequest("Add a short description alongside your screenshots so the AI knows what to extract.");
+                }
             }
 
             var imageBytesForAi = new List<byte[]>();
@@ -74,9 +81,27 @@ namespace EzFit.Controllers
 
             if (images is not null)
             {
+                var totalTiles = 0;
+
                 foreach (var image in images)
                 {
                     var tiles = await _imageService.ProcessAsync(image.OpenReadStream(), cancellationToken);
+
+                    // Tallied across all files in the request, not per file — check before
+                    // decoding the next image so an over-limit request stops early instead
+                    // of paying for every file's decode before rejecting.
+                    totalTiles += tiles.Count;
+                    if (totalTiles > _uploadsOptions.MaxTilesPerRequest)
+                    {
+                        foreach (var tile in tiles)
+                        {
+                            tile.Dispose();
+                        }
+
+                        return BadRequest(
+                            $"These images would require too many tiles to process ({totalTiles} > {_uploadsOptions.MaxTilesPerRequest}). " +
+                            "Split the upload into fewer or shorter screenshots.");
+                    }
 
                     // Encode a copy for the AI call before FileStorageService disposes the tiles
                     foreach (var tile in tiles)

@@ -99,10 +99,16 @@ namespace EzFit.Services
                 imageStream.Position = 0;
             }
 
-            if (info.Width > _uploadsOptions.MaxDimension || info.Height > _uploadsOptions.MaxDimension)
+            if (info.Width > _uploadsOptions.MaxWidth)
             {
                 throw new ImageValidationException(
-                    $"Image dimensions exceed the maximum allowed ({_uploadsOptions.MaxDimension}px per side).");
+                    $"Image width exceeds the maximum allowed ({_uploadsOptions.MaxWidth}px).");
+            }
+
+            if (info.Height > _uploadsOptions.MaxHeight)
+            {
+                throw new ImageValidationException(
+                    $"Image height exceeds the maximum allowed ({_uploadsOptions.MaxHeight}px).");
             }
 
             var pixelCount = (long)info.Width * info.Height;
