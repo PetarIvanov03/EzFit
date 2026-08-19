@@ -6,15 +6,6 @@ label or a workout summary), and an AI service extracts structured data
 (calories, macros, duration, heart rate, sleep stages, etc.) from that input
 automatically instead of requiring manual form entry.
 
-## Live demo
-
-- Frontend: https://ez-fit.vercel.app
-- Backend API: https://ezfit.onrender.com
-
-Backend runs on Render's free tier, so it spins down after 15 minutes of
-inactivity — the first request after idle can take a while to respond while
-the container cold-starts.
-
 ## Tech stack
 
 **Backend**
@@ -69,7 +60,11 @@ and `api/` wraps the backend endpoints with Axios + TanStack Query.
 Requires .NET 8 SDK.
 
 1. `cd backend/EzFit/EzFit`
-2. Configure secrets (don't commit these — use `dotnet user-secrets` or a local `appsettings.Development.json`):
+2. Configure secrets with `dotnet user-secrets` (don't put these in `appsettings.json` or `appsettings.Development.json`):
+   ```
+   dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<postgres connection string>"
+   dotnet user-secrets set "Gemini:ApiKey" "<gemini api key>"
+   ```
    - `ConnectionStrings:DefaultConnection` — a PostgreSQL connection string. **Local dev currently points at the same Neon database as production** — there's no separate local DB set up yet, so be aware writes affect the live data.
    - `Gemini:ApiKey` — a Gemini API key (required for `/api/log`; `/api/entry` and `/api/day` work without it).
    - `Gemini:Model` — optional, defaults to `gemini-3.5-flash` if unset.
@@ -90,9 +85,8 @@ Requires Node.js.
 
 ## Known limitations
 
-- **No authentication.** All requests are scoped to a single hardcoded
-  user (`Id = 1`), seeded directly into the `Users` table. There's no
-  login, no per-user isolation, and no session handling yet.
+- **No authentication yet.** Auth is a planned, later stage of this
+  project — not yet implemented.
 - **Local dev shares the production database.** There's no local/dev
   Postgres instance configured — running the backend locally reads and
   writes to the same Neon database the live deployment uses. This is a
@@ -102,3 +96,8 @@ Requires Node.js.
   implemented.
 - **Free-tier hosting.** The Render backend cold-starts after 15 minutes
   idle, so the first request in a while will be slow.
+- **Uploaded images are not durably stored.** Render's filesystem is
+  ephemeral — files written to `App_Data/uploads` are lost on every
+  redeploy and cold start/restart. `Entry.ImagePath` values in the
+  database can end up pointing at files that no longer exist. Moving
+  uploads to external object storage is a future step.
