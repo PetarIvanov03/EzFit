@@ -1,6 +1,7 @@
 ﻿using EzFit.DTOs.Ai;
 using EzFit.DTOs.Requests;
 using EzFit.DTOs.Responses;
+using EzFit.Entities;
 using EzFit.Services.Interfaces;
 using EzFit.Services.Mappers;
 using Microsoft.AspNetCore.Http;
@@ -41,7 +42,6 @@ namespace EzFit.Controllers
         // POST api/log?date=2026-08-18  (form-data: message=<text>, images=<file(s)>)
         [HttpPost]
         public async Task<ActionResult<LogResultDto>> Log(
-            [FromQuery] DateOnly date,
             [FromForm] string? message,
             [FromForm] List<IFormFile>? images)
         {
@@ -72,6 +72,7 @@ namespace EzFit.Controllers
             var aiResponse = await _aiService.ExtractAsync(message, imageBytesForAi);
             var imagePath = savedBaseNames.Count > 0 ? string.Join(",", savedBaseNames) : null;
 
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var result = new LogResultDto();
 
             foreach (var extraction in aiResponse.Results)
@@ -87,7 +88,13 @@ namespace EzFit.Controllers
                 dto.ImagePath = imagePath;
                 dto.AiRawResponse = aiResponse.RawResponseJson;
 
-                var entryDto = await _entryService.AddEntryAsync(HardcodedUserId, date, dto);
+                // Each entry may resolve to a different day if the AI recognized a
+                // date reference; entries without one default to today.
+                var targetDate = dto.OccurredAt.HasValue
+                    ? DateOnly.FromDateTime(dto.OccurredAt.Value)
+                    : today;
+
+                var entryDto = await _entryService.AddEntryAsync(HardcodedUserId, targetDate, dto);
                 result.CreatedEntries.Add(entryDto);
             }
 

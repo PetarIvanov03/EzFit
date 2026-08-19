@@ -30,7 +30,7 @@
                 {
                     title = new { type = "STRING", description = "Short title for the meal, e.g. 'Fried eggs'" },
                     raw_text = new { type = "STRING", description = "The user's original description, if any" },
-                    occurred_at = new { type = "STRING", description = "ISO 8601 timestamp, if recognizable from the photo/text, otherwise omit the field" },
+                    occurred_at = new { type = "STRING", description = "ISO 8601 timestamp. If the text/photo references a relative date (yesterday, this morning, 3 days ago) or shows an explicit date, resolve it to an absolute date using the reference date given in the prompt. If no date/time is recognizable at all, omit this field entirely." },
                     food_kcal = new { type = "INTEGER", description = "Total calories of the meal" },
                     protein = new { type = "NUMBER", description = "Protein in grams" },
                     fats = new { type = "NUMBER", description = "Fat in grams" },
@@ -53,7 +53,7 @@
                 {
                     title = new { type = "STRING", description = "Short title, e.g. 'Running' or 'Cycling'" },
                     raw_text = new { type = "STRING" },
-                    occurred_at = new { type = "STRING", description = "ISO 8601 timestamp, if recognizable" },
+                    occurred_at = new { type = "STRING", description = "ISO 8601 timestamp. If the text/photo references a relative date (yesterday, this morning, 3 days ago) or shows an explicit date, resolve it to an absolute date using the reference date given in the prompt. If no date/time is recognizable at all, omit this field entirely." },
                     activity_kcal = new { type = "INTEGER", description = "Calories burned" },
                     duration_min = new { type = "INTEGER", description = "Duration in minutes" },
                     distance_km = new { type = "NUMBER" },
@@ -79,7 +79,7 @@
                 {
                     title = new { type = "STRING" },
                     raw_text = new { type = "STRING" },
-                    occurred_at = new { type = "STRING", description = "ISO 8601 timestamp of the entry (when it was uploaded/updated)" },
+                    occurred_at = new { type = "STRING", description = "ISO 8601 timestamp. If the text/photo references a relative date (yesterday, this morning, 3 days ago) or shows an explicit date, resolve it to an absolute date using the reference date given in the prompt. If no date/time is recognizable at all, omit this field entirely." },
                     total_sleep_min = new { type = "INTEGER", description = "Total sleep minutes" },
                     deep_min = new { type = "INTEGER" },
                     rem_min = new { type = "INTEGER" },

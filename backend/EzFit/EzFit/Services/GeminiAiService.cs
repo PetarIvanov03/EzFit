@@ -33,6 +33,15 @@ namespace EzFit.Services
             // Build the "parts" array: optional text first, then one part per image
             var parts = new List<object>();
 
+            var referenceDate = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+            parts.Add(new
+            {
+                text = $"Reference date (\"today\") is {referenceDate}. " +
+                       "Use this to resolve any relative date references in the input " +
+                       "(yesterday, this morning, last Tuesday, 3 days ago, etc.) into " +
+                       "absolute dates for the occurred_at field."
+            });
+
             if (!string.IsNullOrWhiteSpace(message))
             {
                 parts.Add(new { text = message });
